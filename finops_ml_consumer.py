@@ -1,14 +1,16 @@
-from kafka import KafkaConsumer, KafkaProducer
-import json, requests
 
-BROKER = "broker:9092"
+from kafka import KafkaConsumer, KafkaProducer
+import json
+import requests
+
+BROKER = "broker:9092" 
 API_URL = "http://localhost:8002/score" 
+
 
 consumer = KafkaConsumer(
     'gcp_billing_events',
     bootstrap_servers=BROKER,
-    group_id='ml-scoring-group',          
-    auto_offset_reset='earliest',        
+    auto_offset_reset='latest', 
     value_deserializer=lambda x: json.loads(x.decode('utf-8'))
 )
 
@@ -17,13 +19,12 @@ alert_producer = KafkaProducer(
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-print("✅ Konsument uruchomiony i nasłuchuje na 'gcp_billing_events'...")
+print("✅ Konsument (LIVE STREAM) uruchomiony. Czeka na NOWE transakcje i filtruje fraudy...")
 
 try:
     for message in consumer:
         tx = message.value
         
-        # --- MAPOWANIE ---
         features = {
             "billing_record_id": tx.get('billing_record_id', 'unknown'),
             "project_id": tx.get('project_id', 'unknown'),
@@ -36,23 +37,22 @@ try:
             "is_anomaly": int(tx.get('is_anomaly', 0))
         }
         
-     
         try:
             response = requests.post(API_URL, json=features, timeout=2)
+            response.raise_for_status() 
             result = response.json()
-        except requests.RequestException:
+        except Exception as e:
+            print(f"❌ Błąd API dla ID {tx.get('billing_record_id')}: {e}")
             continue
 
         if result.get('is_fraud'):
+            tx_id = tx.get('billing_record_id', 'N/A')
             service = tx.get('service', 'Unknown')
             cost = tx.get('cost_usd', 0.0)
             prob = result.get('fraud_probability', 0.0)
-            tx_id = tx.get('billing_record_id', 'N/A')
 
-          
             print(f"🚨 [FRAUD DETECTED] ID: {tx_id} | Serwis: {service} | Koszt: {cost} USD | Anomaly Score: {prob:.4f}")
             
-           
             alert = {
                 **tx,
                 'fraud_probability': prob,

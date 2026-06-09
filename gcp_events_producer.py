@@ -5,7 +5,7 @@ import random
 import numpy as np
 from datetime import datetime
 
-# 1. Inicjalizacja producenta
+
 producer = KafkaProducer(
     bootstrap_servers='broker:9092',
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -35,10 +35,10 @@ def generate_finops_event():
 
     usage_amount = round(cost_usd * random.uniform(1.5, 3.0), 2)
     
-    # Losowy weekend
+  
     is_weekend = np.random.choice([0, 1], p=[5/7, 2/7])
     
-    # --- LOGIKA ANOMALII ---
+   
     is_anomaly = 0
     
     if service_name == "BigQuery" and random.random() > 0.8:
